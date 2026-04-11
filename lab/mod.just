@@ -15,8 +15,10 @@ DATA_DISK := lab_dir + "/data.qcow2"
 ISO := lab_dir + "/talos-" + TALOS_VERSION + ".iso"
 RAM := "4096"
 CPUS := "2"
-CONTROL_PLANE_ADDR := "127.0.0.1:50000"
-KUBE_API_ADDR := "127.0.0.1:6443"
+
+NODE_IP := "127.0.0.1"
+CONTROL_PLANE_ADDR := NODE_IP + ":50000"
+KUBE_API_ADDR := NODE_IP + ":6443"
 
 export KUBECONFIG := lab_dir + "/kubeconfig"
 export TALOSCONFIG := lab_dir + "/talosconfig"
@@ -25,7 +27,7 @@ export TALOSCONFIG := lab_dir + "/talosconfig"
 # -------------------------
 # Download Talos ISO
 # -------------------------
-talos-download-iso:
+download-iso:
     just log "info" "Downloading Talos ISO"
     if [[ ! -f "{{ISO}}" ]]; then \
         curl -L -o "{{ISO}}" \
@@ -37,7 +39,7 @@ talos-download-iso:
 # -------------------------
 # Create VM disk
 # -------------------------
-talos-create-disk disk:
+create-disk disk:
     just log "info" "Creating VM disk"
     if [[ ! -f "{{ disk }}" ]]; then \
         qemu-img create -f qcow2 "{{ disk }}" 20G; \
@@ -49,7 +51,7 @@ talos-create-disk disk:
 # -------------------------
 # Start VM
 # -------------------------
-talos-up: talos-download-iso
+up: download-iso
     just log "info" "Starting Talos VM"
     just lab talos-create-disk "{{ SYSTEM_DISK }}"
     just lab talos-create-disk "{{ DATA_DISK }}"
@@ -73,12 +75,9 @@ talos-up: talos-download-iso
 # -------------------------
 talos-wait:
     just log "info" "Waiting for Talos API..."
-    # until talosctl version --insecure --nodes "{{CONTROL_PLANE_ADDR}}" >/dev/null 2>&1; do \
+    # until talosctl version --insecure --nodes "{{ NODE_IP }}" >/dev/null 2>&1; do \
     #     sleep 2; \
     # done
-    until nc -z 127.0.0.1 50000; do \
-        sleep 1; \
-    done
 
 # -------------------------
 # Generate minimal config
@@ -86,10 +85,10 @@ talos-wait:
 talos-gen-config:
     just log "info" "Generating Talos controlplane config"
     talosctl gen config kuberaid-lab "https://{{KUBE_API_ADDR}}" \
-        --additional-sans "127.0.0.1" \
+        --additional-sans "{{ NODE_IP }}" \
         --output-types "controlplane,talosconfig" --force
     talosctl config endpoint "https://{{CONTROL_PLANE_ADDR}}"
-    talosctl config node "{{CONTROL_PLANE_ADDR}}"
+    talosctl config node "{{NODE_IP}"
 
 # -------------------------
 # Apply config
@@ -99,7 +98,7 @@ talos-apply-config: talos-gen-config talos-wait
 
     talosctl apply-config \
         --insecure \
-        --nodes {{CONTROL_PLANE_ADDR}} \
+        --nodes "{{ NODE_IP }}" \
         --file controlplane.yaml
 
 
@@ -110,7 +109,7 @@ talos-bootstrap:
     just log "info" "Bootstrapping cluster (etcd init)"
 
     talosctl bootstrap \
-        --nodes "127.0.0.1"
+        --nodes "{{ NODE_IP }}"
 
 
 # -------------------------
@@ -120,20 +119,20 @@ talos-kubeconfig:
     just log "info" "Fetching kubeconfig"
 
     talosctl kubeconfig \
-        --nodes "127.0.0.1" \
+        --nodes "{{ NODE_IP }}" \
         {{KUBECONFIG}}
 
 
 # -------------------------
 # Full bring-up
 # -------------------------
-talos-up-full: talos-up talos-apply-config talos-bootstrap talos-kubeconfig
+up-full: up talos-apply-config talos-bootstrap talos-kubeconfig
     just log "info" "Talos cluster ready"
 
 # -------------------------
 # Stop VM (best effort)
 # -------------------------
-talos-down:
+down:
     just log "warn" "Stopping Talos VM (best effort)"
     pkill -f "{{VM_NAME}}" || true
 
@@ -141,6 +140,6 @@ talos-down:
 # -------------------------
 # Reset everything
 # -------------------------
-talos-reset: talos-down
+reset: down
     just log "warn" "Deleting VM state"
     rm -f "{{SYSTEM_DISK}}" "{{DATA_DISK}}" controlplane.yaml {{KUBECONFIG}}
