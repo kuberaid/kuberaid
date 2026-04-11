@@ -1,0 +1,19 @@
+---
+apiVersion: v2
+description:
+name: kuberaid
+version: 0.0.0
+appVersion: v1.0.0
+home: https://kuberaid.eu
+sources:
+  - https://github.com/kuberaid/kuberaid/tree/main/helm
+  - https://github.com/kuberaid/kuberaid
+dependencies:
+  - name: common
+    repository: https://bjw-s-labs.github.io/helm-charts
+    version: 4.6.2
+annotations:
+  artifacthub.io/category: storage
+  artifacthub.io/changes: |-
+    - kind: changed
+      description: Dependency updates

@@ -1,0 +1,9 @@
+---
+controllers:
+  main:
+    containers:
+      main:
+        image:
+          repository: asd
+          tag: asd
+          
