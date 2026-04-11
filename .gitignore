@@ -1,6 +1,17 @@
 /target
 /helm/charts
 
+# Generated secrets
+/lab/talosconfig
+/lab/kubeconfig
+
+# Generated config
+/lab/controlplane.yaml
+
+# VM
+*.qcow2
+*.iso
+
 # Devenv
 .devenv*
 devenv.local.nix

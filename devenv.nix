@@ -17,6 +17,9 @@ in
     git
     cargo-nextest
     cargo-audit
+    just
+    gum
+    talosctl
   ];
 
   # https://devenv.sh/languages/
