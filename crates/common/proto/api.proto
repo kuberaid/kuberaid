@@ -1,3 +1,14 @@
+syntax = "proto3";
 package kuberaid.v1;
 
-message TestMessage {}
+service Greeter {
+    rpc SayHello (HelloRequest) returns (HelloReply);
+}
+
+message HelloRequest {
+   string name = 1;
+}
+
+message HelloReply {
+    string message = 1;
+}

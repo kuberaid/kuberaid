@@ -100,8 +100,8 @@ up: download-iso (create-disk SYSTEM_DISK) (create-disk DATA_DISK)
         -cdrom "{{ISO}}" \
         -netdev user,id=net0,hostfwd=tcp::50000-:50000,hostfwd=tcp::6443-:6443 \
         -device virtio-net-pci,netdev=net0 \
-        -daemonize
-
+        -nographic \
+        -display none
 
 # -------------------------
 # Wait for API

@@ -9,10 +9,10 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder 
 COPY --from=planner /src/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN cargo chef cook --target x86_64-unknown-linux-musl --release --recipe-path recipe.json
 COPY . .
-RUN cargo build --release --bin kuberaid-agent
+RUN cargo build --target x86_64-unknown-linux-musl --release --bin kuberaid-agent
 
 FROM scratch AS runtime
-COPY --from=builder /src/target/release/kuberaid-agent /kuberaid-agent
+COPY --from=builder /src/target/x86_64-unknown-linux-musl/release/kuberaid-agent /kuberaid-agent
 ENTRYPOINT ["/kuberaid-agent"]

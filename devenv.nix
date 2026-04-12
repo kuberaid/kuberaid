@@ -21,6 +21,7 @@ in
     gum
     talosctl
     openssl
+    cargo-watch
   ];
 
   # https://devenv.sh/languages/
