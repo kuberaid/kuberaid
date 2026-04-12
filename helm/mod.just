@@ -19,13 +19,14 @@ build: vendor crds
     just log "info" "Build helm chart."
     helm package "{{ helm_dir }}"
 
-install: crds
-    just log "info" "Apply helm chart to cluster."
-    helm install kuberaid "{{ helm_dir }}"
+ns:
+    just log "info" "Create namespace."
+    kubectl create ns kuberaid-system &>/dev/null || true
+    kubectl label ns kuberaid-system pod-security.kubernetes.io/enforce=privileged
 
-upgrade: crds
+apply *args: crds ns
     just log "info" "Apply helm chart to cluster."
-    helm upgrade kuberaid "{{ helm_dir }}"
+    helm upgrade -i -n kuberaid-system kuberaid "{{ helm_dir }}" {{ args }}
 
 push:
     helm push "{{ helm_dir }}"

@@ -1,0 +1,18 @@
+[package]
+name = "kuberaid-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+kuberaid-common.workspace = true
+k8s_csi.workspace = true
+
+kube.workspace = true
+k8s-openapi.workspace = true
+schemars.workspace = true
+
+tonic.workspace = true
+
+tracing-subscriber.workspace = true
+tracing.workspace = true

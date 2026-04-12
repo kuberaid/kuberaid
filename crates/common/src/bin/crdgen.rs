@@ -1,6 +1,6 @@
 use kube::CustomResourceExt;
 
-use kuberaid::crds;
+use kuberaid_common::crds;
 
 fn main() {
     print!(

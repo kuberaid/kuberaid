@@ -20,6 +20,7 @@ in
     just
     gum
     talosctl
+    openssl
   ];
 
   # https://devenv.sh/languages/
@@ -33,6 +34,7 @@ in
     config.programs = {
       nixfmt.enable = true;
       rustfmt.enable = true;
+      taplo.enable = true;
     };
   };
 

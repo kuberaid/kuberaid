@@ -3,6 +3,30 @@ set quiet := true
 set shell := ['bash', '-euo', 'pipefail', '-c']
 
 lab_dir := justfile_dir() + '/lab'
+gen_dir := lab_dir + '/gen'
+
+REGISTRY_TLS_DIR := gen_dir + "/registry-tls"
+REGISTRY_CERT := REGISTRY_TLS_DIR + "/domain.crt"
+REGISTRY_KEY := REGISTRY_TLS_DIR + "/domain.key"
+REGISTRY_CA_KEY := REGISTRY_TLS_DIR + "/ca.key"
+REGISTRY_CA_CERT := REGISTRY_TLS_DIR + "/ca.crt"
+
+export OPENSSL_CONFIG := '''
+[req]
+distinguished_name=req_distinguished_name
+req_extensions=v3_req
+prompt=no
+
+[req_distinguished_name]
+CN=kuberaid-registry
+
+[v3_req]
+subjectAltName=@alt_names
+
+[alt_names]
+IP.1=10.0.2.2
+DNS.1=localhost
+'''
 
 # =========================
 # Talos VM Module
@@ -16,13 +40,24 @@ ISO := lab_dir + "/talos-" + TALOS_VERSION + ".iso"
 RAM := "4096"
 CPUS := "2"
 
+secrets_yaml := gen_dir + '/secrets.yaml'
+
+CONTAINER := "podman"
+REGISTRY_PORT := "5000"
+REGISTRY_NAME := "kuberaid-registry"
+REGISTRY_IMAGE := "registry:2"
+REGISTRY_ADDR := "10.0.2.2:" + REGISTRY_PORT
+
 NODE_IP := "127.0.0.1"
 CONTROL_PLANE_ADDR := NODE_IP + ":50000"
 KUBE_API_ADDR := NODE_IP + ":6443"
 
-export KUBECONFIG := lab_dir + "/kubeconfig"
-export TALOSCONFIG := lab_dir + "/talosconfig"
+export KUBECONFIG := gen_dir + "/kubeconfig"
+export TALOSCONFIG := gen_dir + "/talosconfig"
 
+[private]
+container cmd *args:
+    {{CONTAINER}} {{cmd}} {{args}}
 
 # -------------------------
 # Download Talos ISO
@@ -51,10 +86,8 @@ create-disk disk:
 # -------------------------
 # Start VM
 # -------------------------
-up: download-iso
+up: download-iso (create-disk SYSTEM_DISK) (create-disk DATA_DISK)
     just log "info" "Starting Talos VM"
-    just lab talos-create-disk "{{ SYSTEM_DISK }}"
-    just lab talos-create-disk "{{ DATA_DISK }}"
 
     qemu-system-x86_64 \
         -enable-kvm \
@@ -84,11 +117,22 @@ talos-wait:
 # -------------------------
 talos-gen-config:
     just log "info" "Generating Talos controlplane config"
+    mkdir -p "{{ gen_dir }}"
+    if [[ ! -f "{{ secrets_yaml }}" ]]; then \
+        talosctl gen secrets -o "{{ secrets_yaml}}"; \
+    else \
+        just log "info" "secrets.yaml already exists, skipping"; \
+    fi
+    
     talosctl gen config kuberaid-lab "https://{{KUBE_API_ADDR}}" \
+        --with-secrets "{{ secrets_yaml }}" \
+        --config-patch-control-plane @"{{ lab_dir }}/controlplane.yaml" \
         --additional-sans "{{ NODE_IP }}" \
-        --output-types "controlplane,talosconfig" --force
+        --output-types "controlplane,talosconfig" \
+        --output "{{ gen_dir }}" \
+        --force
     talosctl config endpoint "https://{{CONTROL_PLANE_ADDR}}"
-    talosctl config node "{{NODE_IP}"
+    talosctl config node "{{NODE_IP}}"
 
 # -------------------------
 # Apply config
@@ -97,9 +141,8 @@ talos-apply-config: talos-gen-config talos-wait
     just log "info" "Applying Talos config"
 
     talosctl apply-config \
-        --insecure \
         --nodes "{{ NODE_IP }}" \
-        --file controlplane.yaml
+        --file "{{ gen_dir }}/controlplane.yaml"
 
 
 # -------------------------
@@ -143,3 +186,74 @@ down:
 reset: down
     just log "warn" "Deleting VM state"
     rm -f "{{SYSTEM_DISK}}" "{{DATA_DISK}}" controlplane.yaml {{KUBECONFIG}}
+
+registry-gen-certs:
+    just log "info" "Generating self-signed registry TLS certs"
+    mkdir -p "{{REGISTRY_TLS_DIR}}"
+
+    # CA
+    openssl genrsa -out "{{REGISTRY_CA_KEY}}" 4096
+
+    openssl req -x509 -new -nodes \
+        -key "{{REGISTRY_CA_KEY}}" \
+        -sha256 -days 3650 \
+        -subj "/CN=kuberaid-registry-ca" \
+        -out "{{REGISTRY_CA_CERT}}"
+
+    # Server cert config
+    printf %s "$OPENSSL_CONFIG" > "{{REGISTRY_TLS_DIR}}/openssl.cnf"
+
+    # Server key
+    openssl genrsa -out "{{REGISTRY_KEY}}" 4096
+
+    # CSR
+    openssl req -new \
+        -key "{{REGISTRY_KEY}}" \
+        -out "{{REGISTRY_TLS_DIR}}/domain.csr" \
+        -config "{{REGISTRY_TLS_DIR}}/openssl.cnf"
+
+    # Sign cert
+    openssl x509 -req \
+        -in "{{REGISTRY_TLS_DIR}}/domain.csr" \
+        -CA "{{REGISTRY_CA_CERT}}" \
+        -CAkey "{{REGISTRY_CA_KEY}}" \
+        -CAcreateserial \
+        -out "{{REGISTRY_CERT}}" \
+        -days 3650 \
+        -sha256 \
+        -extensions v3_req \
+        -extfile "{{REGISTRY_TLS_DIR}}/openssl.cnf"
+
+registry-up: registry-gen-certs
+    just log "info" "Starting TLS container registry"
+
+    {{CONTAINER}} ps -a --format '{{"{{"}}.Names{{"}}"}}' | grep -q "{{REGISTRY_NAME}}" && \
+        {{CONTAINER}} start "{{REGISTRY_NAME}}" || \
+        {{CONTAINER}} run -d \
+            --restart=always \
+            -p {{REGISTRY_PORT}}:5000 \
+            --name "{{REGISTRY_NAME}}" \
+            -v "{{REGISTRY_TLS_DIR}}:/certs" \
+            -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/domain.crt \
+            -e REGISTRY_HTTP_TLS_KEY=/certs/domain.key \
+            "{{REGISTRY_IMAGE}}"
+
+
+registry-down:
+    just log "warn" "Stopping registry"
+    {{CONTAINER}} stop "{{REGISTRY_NAME}}" || true
+
+registry-reset: registry-down
+    just log "warn" "Removing registry container"
+    {{CONTAINER}} rm "{{REGISTRY_NAME}}" || true
+
+deploy:
+    just log "info" "Deploy"
+    
+    just image push agent
+
+    just helm apply \
+        -n kube-system \
+        --set-literal=controllers.agent.containers.main.image.repository="{{REGISTRY_ADDR}}/kuberaid-agent" \
+        --set-literal=controllers.agent.containers.main.image.tag="dev" \
+        --set-literal=controllers.agent.containers.main.image.pullPolicy="Always"

@@ -1,0 +1,3 @@
+package kuberaid.v1;
+
+message TestMessage {}

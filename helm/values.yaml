@@ -1,1 +1,10 @@
 ---
+controllers:
+  agent:
+    type: daemonset
+
+    containers:
+      main:
+        image:
+          repository: ghcr.io/kuberaid/kuberaid-agent
+          tag: dev

@@ -2,8 +2,8 @@
 /helm/charts
 
 # Generated secrets
-/lab/talosconfig
-/lab/kubeconfig
+/lab/gen/
+/lab/secrets.yaml
 
 # Generated config
 /lab/controlplane.yaml

@@ -1,0 +1,3 @@
+[submodule "crates/k8s_csi/proto"]
+	path = crates/k8s_csi/proto
+	url = https://github.com/container-storage-interface/spec

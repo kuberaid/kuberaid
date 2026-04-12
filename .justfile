@@ -3,10 +3,11 @@
 set quiet := true
 set shell := ['bash', '-euo', 'pipefail', '-c']
 
-export KUBECONFIG := justfile_dir() + "/lab/kubeconfig"
+export KUBECONFIG := justfile_dir() + "/lab/gen/kubeconfig"
 
 mod lab "lab"
 mod helm "helm"
+mod image "image"
 
 [private]
 default:
