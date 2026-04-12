@@ -1,14 +1,51 @@
 syntax = "proto3";
 package kuberaid.v1;
 
-service Greeter {
-    rpc SayHello (HelloRequest) returns (HelloReply);
+import "zfs.proto";
+
+service Agent {
+    // rpc GetNodeInfo(GetNodeInfoRequest) returns (GetNodeInfoResponse);
+    // rpc GetCapacity(GetCapacityRequest) returns (GetCapacityResponse);
+
+    rpc ListPools(ListPoolsRequest) returns (ListPoolsResponse);
+    rpc GetPool(GetPoolRequest) returns (GetPoolResponse);
+
+    // rpc CreateVolume(CreateVolumeRequest) returns (CreateVolumeResponse);
+    // rpc DeleteVolume(DeleteVolumeRequest) returns (DeleteVolumeResponse);
+
+    // rpc GetVolume(GetVolumeRequest) returns (GetVolumeResponse);
+    // rpc ListVolumes(ListVolumesRequest) returns (ListVolumesResponse);
+
+    // rpc CreateSnapshot(CreateSnapshotRequest) returns (CreateSnapshotResponse);
+    // rpc DeleteSnapshot(DeleteSnapshotRequest) returns (DeleteSnapshotResponse);
+    // rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsResponse);
+
+    // rpc CloneVolume(CloneVolumeRequest) returns (CloneVolumeResponse);
+
+    // rpc MountVolume(MountVolumeRequest) returns (MountVolumeResponse);
+    // rpc UnmountVolume(UnmountVolumeRequest) returns (UnmountVolumeResponse);
+
+    // rpc GetState(GetStateRequest) returns (GetStateResponse);
+    rpc WatchState (WatchRequest) returns (stream WatchResponse);
 }
 
-message HelloRequest {
-   string name = 1;
+message GetPoolRequest {
+    string name = 1;
 }
 
-message HelloReply {
+message ListPoolsRequest {}
+
+message GetPoolResponse {
+    Pool pool = 1;
+}
+
+message ListPoolsResponse {
+    repeated Pool pools = 1;
+}
+
+message WatchRequest {
+}
+
+message WatchResponse {
     string message = 1;
 }

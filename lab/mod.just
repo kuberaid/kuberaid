@@ -86,6 +86,27 @@ create-disk disk:
         just log "info" "{{ disk }} already exists, skipping"; \
     fi
 
+# -------------------------
+# Create raw disk
+# -------------------------
+create-raw disk:
+    just log "info" "Creating VM disk"
+    if [[ ! -f "{{ disk }}" ]]; then \
+        dd if=/dev/zero of="{{ disk }}" bs=1024M count=20; \
+    else \
+        just log "info" "{{ disk }} already exists, skipping"; \
+    fi
+
+# -------------------------
+# Create raw disk
+# -------------------------
+losetup disk: (create-raw disk)
+    just log "info" "Setup loop"
+    if [[ -f "{{ disk }}" ]]; then \
+        sudo losetup -f "{{ disk }}" --direct-io=on --show; \
+    else \
+        just log "info" "{{ disk }} already exists, skipping"; \
+    fi
 
 # -------------------------
 # Start VM
@@ -260,11 +281,13 @@ registry-reset: registry-down
 
 deploy:
     just log "info" "Deploy"
-    
+    cargo clippy
     just image push agent
-
     just helm apply \
         -n kube-system \
         --set-literal=controllers.agent.containers.main.image.repository="{{REGISTRY_ADDR}}/kuberaid-agent" \
         --set-literal=controllers.agent.containers.main.image.tag="dev" \
         --set-literal=controllers.agent.containers.main.image.pullPolicy="Always"
+
+watch:
+    cargo watch -s "just lab deploy" -i "**/crd.yaml" -d 5

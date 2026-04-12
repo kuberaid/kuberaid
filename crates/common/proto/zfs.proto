@@ -1,0 +1,13 @@
+syntax = "proto3";
+package kuberaid.v1;
+
+enum State {
+    ONLINE = 0;
+    DEGRADED = 1;
+    OFFLINE = 2;
+}
+
+message Pool {
+    string name = 1;
+    State state = 2;
+}
