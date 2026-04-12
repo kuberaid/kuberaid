@@ -1,0 +1,35 @@
+---
+machine:
+  kernel:
+    modules:
+      - name: zfs
+cluster:
+  # A list of urls that point to additional manifests.
+  extraManifests: []
+  #   - https://www.example.com/manifest1.yaml
+  #   - https://www.example.com/manifest2.yaml
+
+  # A list of inline Kubernetes manifests.
+  inlineManifests: []
+  #   - name: namespace-ci # Name of the manifest.
+  #     contents: |- # Manifest contents as a string.
+  #       apiVersion: v1
+  #       kind: Namespace
+  #       metadata:
+  #       	name: ci
+
+  allowSchedulingOnControlPlanes: true # Allows running workload on control-plane nodes.
+---
+apiVersion: v1alpha1
+kind: HostnameConfig
+auto: stable # A method to automatically generate a hostname for the machine.
+
+
+# # A static hostname to set for the machine.
+# hostname: controlplane1
+# hostname: controlplane1.example.org
+---
+apiVersion: v1alpha1
+kind: RegistryTLSConfig
+name: 10.0.2.2:5000 # Registry endpoint to apply the TLS configuration to.
+insecureSkipVerify: true # Skip TLS server certificate verification (not recommended).

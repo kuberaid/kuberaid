@@ -36,7 +36,7 @@ TALOS_VERSION := "v1.12.6"
 VM_NAME := "talos-node"
 SYSTEM_DISK := lab_dir + "/talos.qcow2"
 DATA_DISK := lab_dir + "/data.qcow2"
-ISO := lab_dir + "/talos-" + TALOS_VERSION + ".iso"
+ISO := lab_dir + "/talos-" + TALOS_VERSION + ".qcow2"
 RAM := "4096"
 CPUS := "2"
 
@@ -59,14 +59,18 @@ export TALOSCONFIG := gen_dir + "/talosconfig"
 container cmd *args:
     {{CONTAINER}} {{cmd}} {{args}}
 
+[private]
+schematic-id:
+    curl -X POST --data-binary @"{{ lab_dir }}/schematic.yaml" "https://factory.talos.dev/schematics" 2>/dev/null | jq -r '.id'
+
 # -------------------------
 # Download Talos ISO
 # -------------------------
-download-iso:
+download-image:
     just log "info" "Downloading Talos ISO"
     if [[ ! -f "{{ISO}}" ]]; then \
         curl -L -o "{{ISO}}" \
-            "https://github.com/siderolabs/talos/releases/download/{{TALOS_VERSION}}/metal-amd64.iso"; \
+            "https://factory.talos.dev/image/$(just lab schematic-id)/{{TALOS_VERSION}}/metal-amd64.qcow2"; \
     else \
         just log "info" "ISO already exists, skipping"; \
     fi
@@ -86,8 +90,14 @@ create-disk disk:
 # -------------------------
 # Start VM
 # -------------------------
-up: download-iso (create-disk SYSTEM_DISK) (create-disk DATA_DISK)
+up: download-image (create-disk DATA_DISK)
     just log "info" "Starting Talos VM"
+
+    if [[ ! -f "{{ SYSTEM_DISK }}" ]]; then \
+        cp -ar "{{ISO}}" "{{SYSTEM_DISK}}"; \
+    else \
+        just log "info" "{{ SYSTEM_DISK }} already exists, skipping"; \
+    fi
 
     qemu-system-x86_64 \
         -enable-kvm \
@@ -100,8 +110,9 @@ up: download-iso (create-disk SYSTEM_DISK) (create-disk DATA_DISK)
         -cdrom "{{ISO}}" \
         -netdev user,id=net0,hostfwd=tcp::50000-:50000,hostfwd=tcp::6443-:6443 \
         -device virtio-net-pci,netdev=net0 \
-        -nographic \
-        -display none
+        -display none \
+        -serial file:serial.log \
+        -daemonize
 
 # -------------------------
 # Wait for API
@@ -137,12 +148,12 @@ talos-gen-config:
 # -------------------------
 # Apply config
 # -------------------------
-talos-apply-config: talos-gen-config talos-wait
+talos-apply-config *args: talos-gen-config talos-wait
     just log "info" "Applying Talos config"
 
     talosctl apply-config \
         --nodes "{{ NODE_IP }}" \
-        --file "{{ gen_dir }}/controlplane.yaml"
+        --file "{{ gen_dir }}/controlplane.yaml" {{ args }}
 
 
 # -------------------------
@@ -169,7 +180,7 @@ talos-kubeconfig:
 # -------------------------
 # Full bring-up
 # -------------------------
-up-full: up talos-apply-config talos-bootstrap talos-kubeconfig
+up-full: up (talos-apply-config "--insecure") talos-bootstrap talos-kubeconfig
     just log "info" "Talos cluster ready"
 
 # -------------------------
