@@ -7,8 +7,8 @@ service Agent {
     // rpc GetNodeInfo(GetNodeInfoRequest) returns (GetNodeInfoResponse);
     // rpc GetCapacity(GetCapacityRequest) returns (GetCapacityResponse);
 
-    rpc ListPools(ListPoolsRequest) returns (ListPoolsResponse);
-    rpc GetPool(GetPoolRequest) returns (GetPoolResponse);
+    // rpc ListPools(ListPoolsRequest) returns (ListPoolsResponse);
+    // rpc GetPool(GetPoolRequest) returns (GetPoolResponse);
 
     // rpc CreateVolume(CreateVolumeRequest) returns (CreateVolumeResponse);
     // rpc DeleteVolume(DeleteVolumeRequest) returns (DeleteVolumeResponse);

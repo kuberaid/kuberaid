@@ -11,6 +11,8 @@
 # VM
 *.qcow2
 *.iso
+*.img
+*.log
 
 # Devenv
 .devenv*

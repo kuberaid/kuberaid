@@ -1,15 +1,22 @@
 [package]
-name = "kuberaid-controller"
+name = "kuberaid-manager"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
 kuberaid-common.workspace = true
+k8s_csi.workspace = true
+zfs.workspace = true
 
 kube.workspace = true
 k8s-openapi.workspace = true
 schemars.workspace = true
 
+tokio.workspace = true
+tokio-stream.workspace = true
+tonic.workspace = true
+
 tracing-subscriber.workspace = true
 tracing.workspace = true
+clap = { version = "4.6", features = ["derive", "env"] }

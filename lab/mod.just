@@ -98,15 +98,21 @@ create-raw disk:
     fi
 
 # -------------------------
-# Create raw disk
+# Map disk image
 # -------------------------
 losetup disk: (create-raw disk)
     just log "info" "Setup loop"
-    if [[ -f "{{ disk }}" ]]; then \
-        sudo losetup -f "{{ disk }}" --direct-io=on --show; \
+
+    if [[ -n "$(losetup -j "{{ disk }}" -O NAME --noheadings 2>/dev/null || true)" ]]; then \
+        just log "info" "Already attached: {{ disk }}"; \
     else \
-        just log "info" "{{ disk }} already exists, skipping"; \
+        just log "info" "Creating loop device"; \
+        sudo losetup -f "{{ disk }}" --direct-io=on --show; \
     fi
+
+import: (losetup "disk.img")
+    just log "info" "Import pool"
+    sudo zpool import lab
 
 # -------------------------
 # Start VM
