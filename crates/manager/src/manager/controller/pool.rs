@@ -24,35 +24,36 @@ use tracing::{error, info};
 
 async fn reconcile(obj: Arc<Pool>, manager: Arc<KuberaidManager>) -> Result<Action, Error> {
     // let _ = manager.zfs.refresh().await;
+
+    let mut destroyed = false;
     let status = if let Some(pool) = manager.zfs.get_pool(&obj.name_any()).await {
-        info!("{pool:?}");
         if pool.destroyed {
-            None
-        } else {
-            Some(PoolStatus {
-                imported: true,
-                properties: pool
-                    .properties
-                    .into_iter()
-                    .map(|(k, v)| match v.value {
-                        ZfsScalar::F32(f) => (k, f.to_string()),
-                        ZfsScalar::U64(u) => (k, u.to_string()),
-                        ZfsScalar::String(s) => (k, s),
-                        _ => (k, String::new()),
-                    })
-                    .collect(),
-                ..PoolStatus::default()
-            })
+            destroyed = true;
+        }
+
+        PoolStatus {
+            imported: true,
+            properties: pool
+                .properties
+                .into_iter()
+                .map(|(k, v)| match v.value {
+                    ZfsScalar::F32(f) => (k, f.to_string()),
+                    ZfsScalar::U64(u) => (k, u.to_string()),
+                    ZfsScalar::String(s) => (k, s),
+                    _ => (k, String::new()),
+                })
+                .collect(),
+            ..PoolStatus::default()
         }
     } else {
-        Some(PoolStatus {
+        PoolStatus {
             imported: false,
             ..PoolStatus::default()
-        })
+        }
     };
 
     let pools = Api::<Pool>::all(manager.client.clone());
-    if let Some(status) = status {
+    if !destroyed {
         let status = json!({ "status": status });
 
         pools
@@ -63,10 +64,10 @@ async fn reconcile(obj: Arc<Pool>, manager: Arc<KuberaidManager>) -> Result<Acti
             )
             .await?;
     } else {
-        info!("Delet");
         pools
             .delete(&obj.name_any(), &DeleteParams::foreground())
             .await?;
+        manager.zfs.gc().await;
     }
 
     Ok(Action::await_change())

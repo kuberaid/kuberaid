@@ -132,6 +132,7 @@ pub enum ZfsEventKind {
     ConfigSync,
     PoolImport,
     PoolExport,
+    PoolCreate,
     PoolDestroy,
     Raw(RawProps),
 }
@@ -170,6 +171,7 @@ impl TryFrom<RawZfsEvent> for ZfsEvent {
             "sysevent.fs.zfs.config_sync" => ZfsEventKind::ConfigSync,
             "sysevent.fs.zfs.pool_import" => ZfsEventKind::PoolImport,
             "sysevent.fs.zfs.pool_export" => ZfsEventKind::PoolExport,
+            "sysevent.fs.zfs.pool_create" => ZfsEventKind::PoolCreate,
             "sysevent.fs.zfs.pool_destroy" => ZfsEventKind::PoolDestroy,
             _ => ZfsEventKind::Raw(v.kind),
         };

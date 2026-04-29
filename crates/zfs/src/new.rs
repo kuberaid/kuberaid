@@ -109,18 +109,18 @@ impl DatasetTree {
                 guid: id,
                 name: pool.name,
                 datasets: vec![],
-                destroyed,
+                destroyed: false,
                 properties: HashMap::with_capacity(pool.properties.capacity()),
             });
             p.properties.extend(pool.properties);
-            p.destroyed = destroyed;
-        } else if !destroyed {
-            pools.remove(&id);
+            p.destroyed = false;
         } else if destroyed {
             let Some(p) = pools.get_mut(&id) else {
                 return;
             };
             p.destroyed = destroyed;
+        } else if !destroyed {
+            pools.remove(&id);
         }
     }
 }
@@ -201,10 +201,13 @@ impl ZfsInner {
                                     tree.delta_pool(PoolId(event.pool_guid), p, false).await;
                                 }
                             }
+                            ZfsEventKind::PoolCreate => {
+                                info!("POOL CREATE");
+                                tree.delta_pool(PoolId(event.pool_guid), None, false).await;
+                            }
                             ZfsEventKind::PoolExport => {
                                 tree.delta_pool(PoolId(event.pool_guid), None, false).await;
                             }
-
                             ZfsEventKind::PoolDestroy => {
                                 tree.delta_pool(PoolId(event.pool_guid), None, true).await;
                             }
@@ -259,6 +262,10 @@ impl Zfs {
             .values()
             .find(|v| v.name.eq(name))
             .cloned()
+    }
+
+    pub async fn gc(&self) {
+        self.tree.pools.write().await.retain(|_, v| !v.destroyed);
     }
 
     pub async fn get_dataset(&self, name: &str) -> Option<Dataset> {
