@@ -13,7 +13,7 @@ vendor:
 
 crds:
     just log "info" "Generate crds."
-    cargo run --bin crdgen > "{{ crd_yaml }}"
+    cargo run --bin crdgen --features=crdgen > "{{ crd_yaml }}"
 
 build: vendor crds
     just log "info" "Build helm chart."

@@ -6,7 +6,7 @@ CONTAINER := "podman"
 REGISTRY_PORT := "5000"
 REGISTRY_ADDR := "localhost:" + REGISTRY_PORT
 
-image_dir := justfile_dir() + '/image'
+image_dir := justfile_dir() + '/container'
 
 build name:
     just log "info" "Building image {{name}}"

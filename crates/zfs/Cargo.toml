@@ -17,9 +17,9 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror = "2"
 
+tracing.workspace = true
+
+schemars.workspace = true
+
 tokio = { workspace = true, optional = true }
 tokio-util = { version = "0.7", features = ["codec"] }
-
-[[bin]]
-name = "zpool-events"
-path = "src/bin/zpool-events.rs"

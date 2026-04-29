@@ -8,18 +8,18 @@ edition = "2024"
 license = "MPL-2.0"
 
 [workspace.dependencies]
-kuberaid-common = { path = "crates/common" }
+kuberaid-api = { path = "crates/api" }
 k8s_csi.path = "crates/k8s_csi"
 zfs.path = "crates/zfs"
 
-kube = { version = "3", features = ["runtime", "derive"] }
+kube = { version = "3", features = ["runtime", "derive", "unstable-runtime"] }
 k8s-openapi = { version = "0.27.1", features = ["latest", "schemars"] }
 schemars = { version = "1" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 tokio = { version = "1", features = ["full"] }
-tokio-stream = { version = "0.1" }
+tokio-stream = { version = "0.1", features = ["sync"] }
 
 tonic = "0.14"
 prost = "0.14"

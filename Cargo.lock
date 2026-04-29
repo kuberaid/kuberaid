@@ -256,6 +256,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
+name = "cfg_aliases"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
+
+[[package]]
 name = "chrono"
 version = "0.4.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1151,17 +1157,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "kuberaid-common"
+name = "kuberaid-api"
 version = "0.1.0"
 dependencies = [
- "k8s-openapi",
- "kube",
  "prost",
  "prost-types",
- "schemars",
- "serde",
- "serde_json",
- "serde_yaml",
  "tonic",
  "tonic-prost",
  "tonic-prost-build",
@@ -1172,11 +1172,17 @@ name = "kuberaid-manager"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "futures",
  "k8s-openapi",
  "k8s_csi",
  "kube",
- "kuberaid-common",
+ "kuberaid-api",
+ "nix",
  "schemars",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
  "tonic",
@@ -1258,6 +1264,18 @@ name = "multimap"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
+
+[[package]]
+name = "nix"
+version = "0.31.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d6d0705320c1e6ba1d912b5e37cf18071b6c2e9b7fa8215a1e8a7651966f5d3"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
 
 [[package]]
 name = "nu-ansi-term"
@@ -2061,6 +2079,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -2700,11 +2719,13 @@ dependencies = [
  "chrono",
  "futures",
  "itertools",
+ "schemars",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
+ "tracing",
 ]
 
 [[package]]

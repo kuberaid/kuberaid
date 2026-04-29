@@ -1,17 +1,14 @@
 #![warn(clippy::pedantic)]
 
-use std::path::PathBuf;
-
-use k8s_csi::v1::{
-    controller_server::ControllerServer, identity_server::IdentityServer, node_server::NodeServer,
-};
-use kuberaid_common::grpc::agent_server::AgentServer;
-use kuberaid_manager::{csi::CSIPlugin, manager::KuberaidManager};
-use tokio::net::UnixListener;
-use tokio_stream::wrappers::UnixListenerStream;
-use tonic::transport::Server;
+use std::{net::SocketAddr, path::PathBuf};
 
 use clap::{Parser, Subcommand};
+use kube::Client;
+use kuberaid_manager::{
+    csi::CSIPlugin,
+    manager::{KuberaidManager, controller},
+};
+use nix::unistd::gethostname;
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -24,7 +21,13 @@ pub enum Commands {
         )]
         endpoint: PathBuf,
     },
-    Manager,
+    Manager {
+        #[arg(short, long, env = "BIND", default_value = "[::]:50051")]
+        address: SocketAddr,
+
+        #[arg(short, long, env = "NODE_NAME", default_value_t = gethostname().ok().and_then(|o| o.into_string().ok()).unwrap_or_default())]
+        node_name: String,
+    },
 }
 
 #[derive(Parser)]
@@ -42,25 +45,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match &cli.command {
         Some(Commands::Csi { endpoint }) => {
             let csi = CSIPlugin::default();
-
-            let uds = UnixListener::bind(endpoint)?;
-            let incoming = UnixListenerStream::new(uds);
-
-            Server::builder()
-                .add_service(IdentityServer::new(csi.clone()))
-                .add_service(ControllerServer::new(csi.clone()))
-                .add_service(NodeServer::new(csi))
-                .serve_with_incoming(incoming)
-                .await?;
+            csi.serve(endpoint).await?;
         }
-        Some(Commands::Manager) => {
-            let addr = "[::1]:50051".parse()?;
-            let manager = KuberaidManager::default();
+        Some(Commands::Manager { address, node_name }) => {
+            let manager = KuberaidManager::new(node_name.clone()).await?;
 
-            Server::builder()
-                .add_service(AgentServer::new(manager.clone()))
-                .serve(addr)
-                .await?;
+            manager.run(*address).await;
         }
         None => {}
     }

@@ -7,7 +7,7 @@ export KUBECONFIG := justfile_dir() + "/lab/gen/kubeconfig"
 
 mod lab "lab"
 mod helm "helm"
-mod image "image"
+mod container "container"
 
 [private]
 default:

@@ -5,6 +5,7 @@ use itertools::Itertools;
 
 use serde::Deserialize;
 use tokio::{io::BufReader, process::Command};
+use tracing::{error, info};
 
 use crate::error::{Error, Result};
 use crate::{
@@ -42,13 +43,19 @@ async fn call<T: serde::de::DeserializeOwned>(cmd: &mut Command) -> Result<Optio
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub struct DatasetRef {
+    pub id: u64,
+    pub name: String,
+}
+
+#[derive(Debug, Clone)]
 pub enum HistoryEventKind {
     Set {
-        dataset_id: u64,
-        dataset_name: String,
         property: String,
         value: ZfsScalar,
+
+        dataset: Option<DatasetRef>,
     },
     Import,
     Open,
@@ -56,7 +63,7 @@ pub enum HistoryEventKind {
     Unknown {
         name: String,
         value: String,
-        dataset: Option<(u64, String)>,
+        dataset: Option<DatasetRef>,
     },
 }
 
@@ -66,26 +73,30 @@ impl TryFrom<&mut RawProps> for HistoryEventKind {
     fn try_from(p: &mut RawProps) -> Result<Self> {
         let s = get_key::<String>(p, "history_internal_name")?;
         let internal = get_key::<String>(p, "history_internal_str")?;
+        let dataset = if p.contains_key("history_dsid") && p.contains_key("histroy_dsname") {
+            Some(DatasetRef {
+                id: get_key(p, "history_dsid")?,
+                name: get_key(p, "history_dsname")?,
+            })
+        } else {
+            None
+        };
+
         match s.as_str() {
             "set" => {
                 let (k, v) = internal.split_once('=').unwrap();
 
                 Ok(Self::Set {
-                    dataset_id: get_key(p, "history_dsid")?,
-                    dataset_name: get_key(p, "history_dsname")?,
                     property: k.to_string(),
                     value: ZfsScalar::from_str(v)?,
+                    dataset,
                 })
             }
 
             _ => Ok(Self::Unknown {
                 name: s,
-                value: get_key(p, "history_internal_str")?,
-                dataset: if p.contains_key("history_dsid") && p.contains_key("history_dsname") {
-                    Some((get_key(p, "history_dsid")?, get_key(p, "history_dsname")?))
-                } else {
-                    None
-                },
+                value: internal,
+                dataset,
             }),
         }
     }
@@ -111,7 +122,7 @@ impl TryFrom<&mut RawProps> for HistoryEventKind {
 //     }
 // }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ZfsEventKind {
     HistoryEvent {
         hostname: String,
@@ -119,10 +130,13 @@ pub enum ZfsEventKind {
         kind: HistoryEventKind,
     },
     ConfigSync,
+    PoolImport,
+    PoolExport,
+    PoolDestroy,
     Raw(RawProps),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ZfsEvent<T = ZfsEventKind> {
     pub class: String,
     pub version: u64,
@@ -154,6 +168,9 @@ impl TryFrom<RawZfsEvent> for ZfsEvent {
                 txg: get_key(&mut v.kind, "history_txg")?,
             },
             "sysevent.fs.zfs.config_sync" => ZfsEventKind::ConfigSync,
+            "sysevent.fs.zfs.pool_import" => ZfsEventKind::PoolImport,
+            "sysevent.fs.zfs.pool_export" => ZfsEventKind::PoolExport,
+            "sysevent.fs.zfs.pool_destroy" => ZfsEventKind::PoolDestroy,
             _ => ZfsEventKind::Raw(v.kind),
         };
 
@@ -254,14 +271,11 @@ impl ZfsCli {
     }
 
     pub fn events() -> Result<EventStream> {
-        // let mut out = Self::zpool()
-        //     .args(["events", "-vHf"])
-        //     .stdout(std::process::Stdio::piped())
-        //     .spawn()?;
-        let mut out = Command::new("../../target/release/zpool-events")
+        let mut cmd = Self::zpool()
+            .args(["events", "-vHf"])
             .stdout(std::process::Stdio::piped())
             .spawn()?;
-        let stdout = out.stdout.take().ok_or(Error::EventStreamClosed)?;
+        let stdout = cmd.stdout.take().ok_or(Error::EventStreamClosed)?;
 
         let reader = BufReader::new(stdout);
         let blocks = FramedRead::new(
@@ -276,7 +290,14 @@ impl ZfsCli {
 
                 RawZfsEvent::from_str(&string)
             })
-            .map(|e| e.and_then(ZfsEvent::try_from))
+            .map(|e| {
+                #[cfg(debug_assertions)]
+                let str_e = format!("{e:?}");
+                let r = e.and_then(ZfsEvent::try_from);
+                #[cfg(debug_assertions)]
+                let r = r.inspect_err(|r| error!("{r}: {str_e}"));
+                r
+            })
             .filter_map(async |s| s.ok());
 
         Ok(Box::pin(stream))
@@ -297,10 +318,9 @@ impl ZfsBackend for ZfsCli {
             "get",
             if props.is_empty() { "all" } else { &props },
             name,
-            "--json-pool-key-guid",
+            // "--json-pool-key-guid",
         ]))
         .await?;
-
         Ok(out.and_then(|mut o| o.inner.pools.remove(name)))
     }
 

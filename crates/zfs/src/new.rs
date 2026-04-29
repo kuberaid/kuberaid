@@ -1,18 +1,20 @@
+use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{collections::HashMap, path::PathBuf};
 
 use chrono::{DateTime, TimeDelta, Utc};
 use futures::StreamExt;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock, broadcast};
 use tokio::task::JoinHandle;
+use tracing::info;
 
 use crate::cli::{EventStream, HistoryEventKind, ZfsCli, ZfsEvent, ZfsEventKind, ZfsScalar};
 use crate::{Property, Result, ZDataset, ZPool, ZfsBackend};
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]
 pub struct DatasetId(String);
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, Default, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct PoolId(u64);
 
 #[derive(Clone, Debug)]
@@ -28,13 +30,14 @@ pub struct Dataset {
     pub properties: HashMap<String, Property<ZfsScalar>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Pool {
     pub guid: PoolId,
     pub name: String,
 
     pub datasets: Vec<DatasetId>,
 
+    pub destroyed: bool,
     pub properties: HashMap<String, Property<ZfsScalar>>,
 }
 
@@ -75,89 +78,164 @@ impl DatasetTree {
                 Pool {
                     guid,
                     name: pool.name,
-                    datasets: Vec::new(),
                     properties: pool.properties,
+                    ..Pool::default()
                 },
             );
         }
     }
 
-    async fn delta_dataset(&self, id: &DatasetId, dataset: ZDataset) {
+    async fn delta_dataset(&self, id: DatasetId, dataset: Option<ZDataset>) {
         let mut datasets = self.datasets.write().await;
-        if let Some(d) = datasets.get_mut(id) {
+        if let Some(dataset) = dataset {
+            let d = datasets.entry(id).or_insert(Dataset {
+                properties: HashMap::with_capacity(dataset.properties.capacity()),
+                name: dataset.name,
+                path: PathBuf::new(),
+                parent: None,
+                children: vec![],
+                pool: PoolId::default(),
+            });
             d.properties.extend(dataset.properties);
+        } else {
+            datasets.remove(&id);
+        }
+    }
+
+    async fn delta_pool(&self, id: PoolId, pool: Option<ZPool>, destroyed: bool) {
+        let mut pools = self.pools.write().await;
+        if let Some(pool) = pool {
+            let p = pools.entry(id).or_insert(Pool {
+                guid: id,
+                name: pool.name,
+                datasets: vec![],
+                destroyed,
+                properties: HashMap::with_capacity(pool.properties.capacity()),
+            });
+            p.properties.extend(pool.properties);
+            p.destroyed = destroyed;
+        } else if !destroyed {
+            pools.remove(&id);
+        } else if destroyed {
+            let Some(p) = pools.get_mut(&id) else {
+                return;
+            };
+            p.destroyed = destroyed;
         }
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Zfs(Arc<ZfsInner>);
+
 #[derive(Debug)]
-pub struct Zfs {
+pub struct ZfsInner {
     tree: Arc<DatasetTree>,
-    // events: EventStream,
+    events: broadcast::Sender<ZfsEvent>,
     watcher: JoinHandle<Result<()>>,
 }
 
-impl Default for Zfs {
-    fn default() -> Self {
+impl Deref for Zfs {
+    type Target = ZfsInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl ZfsInner {
+    fn new() -> Self {
         let tree: Arc<DatasetTree> = Arc::default();
 
+        let tx = tokio::sync::broadcast::Sender::new(5);
         let watcher = tokio::spawn({
             let tree = tree.clone();
+            let tx = tx.clone();
             async move {
                 loop {
                     let now = Utc::now();
                     let mut events = ZfsCli::events()?;
                     while let Some(event) = events.next().await {
-                        if event.time < now {
+                        if now > event.time {
                             continue;
                         }
 
-                        match event.kind {
+                        match &event.kind {
                             ZfsEventKind::HistoryEvent {
                                 hostname,
                                 txg,
                                 kind,
                             } => match kind {
                                 HistoryEventKind::Set {
-                                    dataset_id,
-                                    dataset_name,
                                     property,
                                     value,
+                                    dataset: Some(dataset),
                                 } => {
-                                    if let Ok(Some(d)) =
-                                        ZfsCli::get_dataset_with_prop(&dataset_name, &property)
-                                            .await
+                                    if let Ok(d) =
+                                        ZfsCli::get_dataset_with_prop(&dataset.name, property).await
                                     {
-                                        tree.delta_dataset(&DatasetId(dataset_name), d).await;
+                                        tree.delta_dataset(DatasetId(dataset.name.clone()), d)
+                                            .await;
                                     }
                                 }
+                                HistoryEventKind::Set {
+                                    property,
+                                    value,
+                                    dataset: None,
+                                } => {
+                                    if let Ok(p) =
+                                        ZfsCli::get_pool_with_prop(&event.pool, property).await
+                                    {
+                                        tree.delta_pool(PoolId(event.pool_guid), p, false).await;
+                                    }
+                                }
+
                                 HistoryEventKind::Import => {}
                                 HistoryEventKind::Open => {}
 
                                 _ => {}
                             },
 
+                            ZfsEventKind::PoolImport => {
+                                if let Ok(p) = ZfsCli::get_pool(&event.pool).await {
+                                    tree.delta_pool(PoolId(event.pool_guid), p, false).await;
+                                }
+                            }
+                            ZfsEventKind::PoolExport => {
+                                tree.delta_pool(PoolId(event.pool_guid), None, false).await;
+                            }
+
+                            ZfsEventKind::PoolDestroy => {
+                                tree.delta_pool(PoolId(event.pool_guid), None, true).await;
+                            }
+
                             ZfsEventKind::ConfigSync => {}
 
                             _ => {}
                         }
+
+                        let _ = tx.send(event);
                     }
                 }
             }
         });
 
-        Self { tree, watcher }
+        Self {
+            tree,
+            watcher,
+            events: tx,
+        }
     }
 }
 
 impl Zfs {
     pub async fn new() -> Result<Self> {
-        let mut s = Self::default();
+        let mut s = Self(Arc::new(ZfsInner::new()));
         s.refresh().await?;
         Ok(s)
     }
 
-    pub async fn refresh(&mut self) -> Result<()> {
+    pub async fn refresh(&self) -> Result<()> {
         let datasets = ZfsCli::datasets().await?;
         let pools = ZfsCli::pools().await?;
 
@@ -169,6 +247,20 @@ impl Zfs {
         Ok(())
     }
 
+    pub async fn get_pools(&self) -> Vec<Pool> {
+        self.tree.pools.read().await.values().cloned().collect()
+    }
+
+    pub async fn get_pool(&self, name: &str) -> Option<Pool> {
+        self.tree
+            .pools
+            .read()
+            .await
+            .values()
+            .find(|v| v.name.eq(name))
+            .cloned()
+    }
+
     pub async fn get_dataset(&self, name: &str) -> Option<Dataset> {
         self.tree
             .datasets
@@ -176,6 +268,11 @@ impl Zfs {
             .await
             .get(&DatasetId(name.to_string()))
             .cloned()
+    }
+
+    #[must_use]
+    pub fn events(&self) -> broadcast::Receiver<ZfsEvent> {
+        self.events.subscribe()
     }
 }
 

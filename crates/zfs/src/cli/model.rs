@@ -1,11 +1,12 @@
 use std::{collections::HashMap, str::FromStr};
 
-use serde::Deserialize;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::{ZDataset, ZPool};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Serialize, Debug, JsonSchema)]
 pub enum ZfsScalar {
     U64(u64),
     F32(f32),
