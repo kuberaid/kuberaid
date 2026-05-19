@@ -14,5 +14,6 @@ COPY . .
 RUN cargo build --target x86_64-unknown-linux-musl --release --bin kuberaid-manager
 
 FROM scratch AS runtime
+# FROM busybox:musl AS runtime
 COPY --from=builder /src/target/x86_64-unknown-linux-musl/release/kuberaid-manager /kuberaid-manager
 ENTRYPOINT ["/kuberaid-manager"]

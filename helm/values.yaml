@@ -1,10 +1,64 @@
 ---
+defaultPodOptions:
+  automountServiceAccountToken: true
+  readOnlyRootFilesystem: true
+
 controllers:
-  agent:
+  manager:
     type: daemonset
 
     containers:
       main:
         image:
-          repository: ghcr.io/kuberaid/kuberaid-agent
+          repository: ghcr.io/kuberaid/kuberaid-manager
           tag: dev
+        args: ["manager"]
+        env:
+          CHROOT: /host
+          NODE_NAME:
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+        securityContext:
+          # allowPrivilegeEscalation: false
+          privileged: true
+          # capabilities:
+            # drop: ["ALL"]
+            # add: ["SYS_ADMIN", "SYS_CHROOT", "DAC_OVERRIDE", "MKNOD"]
+
+persistence:
+  tmp:
+    type: emptyDir
+    globalMounts:
+      - path: /csi
+
+  host:
+    type: hostPath
+    hostPath: /
+    hostPathType: Directory
+    globalMounts:
+      - path: /host
+        mountPropagation: HostToContainer
+        readOnly: true
+
+  dev:
+    type: hostPath
+    hostPath: /dev
+    hostPathType: Directory
+
+rbac:
+  roles:
+    manager:
+      type: ClusterRole
+      rules:
+        - apiGroups: ["kuberaid.eu", "zfs.kuberaid.eu"]
+          resources: ["*"]
+          verbs: ["*"]
+  bindings:
+    manager:
+      type: ClusterRoleBinding
+      subjects:
+        - identifier: kuberaid
+          serviceAccount: kuberaid
+      roleRef:
+        identifier: manager

@@ -32,7 +32,7 @@ DNS.1=localhost
 # Talos VM Module
 # =========================
 
-TALOS_VERSION := "v1.12.6"
+TALOS_VERSION := "v1.13.2"
 VM_NAME := "talos-node"
 SYSTEM_DISK := lab_dir + "/talos.qcow2"
 DATA_DISK := lab_dir + "/data.qcow2"
@@ -288,12 +288,12 @@ registry-reset: registry-down
 deploy:
     just log "info" "Deploy"
     cargo clippy
-    just image push agent
+    just container push manager
     just helm apply \
         -n kube-system \
-        --set-literal=controllers.agent.containers.main.image.repository="{{REGISTRY_ADDR}}/kuberaid-agent" \
-        --set-literal=controllers.agent.containers.main.image.tag="dev" \
-        --set-literal=controllers.agent.containers.main.image.pullPolicy="Always"
+        --set-literal=controllers.manager.containers.main.image.repository="{{REGISTRY_ADDR}}/kuberaid-manager" \
+        --set-literal=controllers.manager.containers.main.image.tag="dev" \
+        --set-literal=controllers.manager.containers.main.image.pullPolicy="Always"
 
 watch:
     cargo watch -s "just lab deploy" -i "**/crd.yaml" -d 5

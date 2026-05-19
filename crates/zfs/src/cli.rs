@@ -1,11 +1,11 @@
+use std::os::unix::fs;
 use std::{collections::HashMap, pin::Pin, str::FromStr};
 
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use itertools::Itertools;
 
-use serde::Deserialize;
 use tokio::{io::BufReader, process::Command};
-use tracing::{error, info};
+use tracing::error;
 
 use crate::error::{Error, Result};
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
     cli::model::{Datasets, Pools, ZfsOutput},
 };
 use futures::{Stream, StreamExt};
-use tokio_util::codec::{AnyDelimiterCodec, FramedRead, LinesCodec};
+use tokio_util::codec::{AnyDelimiterCodec, FramedRead};
 
 mod model;
 
@@ -218,7 +218,9 @@ impl FromStr for RawZfsEvent {
         while let Some(line) = lines.next()
             && !line.is_empty()
         {
-            let (k, v) = line.trim().split_once('=').unwrap();
+            let Some((k, v)) = line.trim().split_once('=') else {
+                continue;
+            };
             let k = k.trim().trim_matches(['"']);
             let v = v.trim().trim_matches(['"']);
 
@@ -264,12 +266,25 @@ impl FromStr for RawZfsEvent {
 pub type EventStream = Pin<Box<dyn Stream<Item = ZfsEvent> + Send>>;
 
 impl ZfsCli {
+    fn chroot_wrap(mut cmd: Command) -> Command {
+        if let Ok(path) = std::env::var("CHROOT") {
+            unsafe {
+                cmd.pre_exec(move || {
+                    fs::chroot(&path)?;
+                    std::env::set_current_dir("/")?;
+                    Ok(())
+                });
+            }
+        }
+        cmd
+    }
+
     fn zfs() -> Command {
-        Command::new("zfs")
+        Self::chroot_wrap(Command::new("zfs"))
     }
 
     fn zpool() -> Command {
-        Command::new("zpool")
+        Self::chroot_wrap(Command::new("zpool"))
     }
 
     pub fn events() -> Result<EventStream> {
