@@ -13,3 +13,13 @@ spec:
       name: shell
       securityContext:
         privileged: true
+      volumeMounts:
+        - mountPath: /host
+          mountPropagation: HostToContainer
+          name: host
+          readOnly: true
+  volumes:
+    - hostPath:
+        path: /
+        type: Directory
+      name: host

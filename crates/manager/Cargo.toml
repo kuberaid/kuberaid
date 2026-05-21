@@ -31,8 +31,9 @@ tracing-subscriber.workspace = true
 tracing.workspace = true
 clap = { version = "4.6", features = ["derive", "env"] }
 
+anyhow.workspace = true
+futures = "0.3"
+nix = { version = "0.31", features = ["hostname"] }
+
 # CRD Manifest Gen
 serde_yaml = { version = "0.9", optional = true }
-thiserror = "2.0.18"
-futures = "0.3.32"
-nix = { version = "0.31.2", features = ["hostname"] }

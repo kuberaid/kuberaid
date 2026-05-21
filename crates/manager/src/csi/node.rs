@@ -67,7 +67,7 @@ impl Node for CSIPlugin {
         req: Request<NodeGetInfoRequest>,
     ) -> Result<Response<NodeGetInfoResponse>, Status> {
         Ok(Response::new(NodeGetInfoResponse {
-            node_id: String::new(),
+            node_id: self.node_name.clone(),
             max_volumes_per_node: i64::MAX,
             accessible_topology: None,
         }))

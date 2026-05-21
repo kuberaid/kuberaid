@@ -1,17 +1,72 @@
 ---
+defaultPodOptionsStrategy: merge
 defaultPodOptions:
   automountServiceAccountToken: true
-  readOnlyRootFilesystem: true
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    fsGroupChangePolicy: OnRootMismatch
 
 controllers:
+  csi-driver:
+    type: daemonset
+
+    pod:
+      securityContext:
+        runAsNonRoot: false
+        runAsUser: 0
+        runAsGroup: 0
+        fsGroup: 0
+
+    containers:
+      main:
+        image: &image
+          repository: ghcr.io/kuberaid/kuberaid-manager
+          tag: dev
+        args: ["csi"]
+        env:
+          NODE_NAME:
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+        securityContext: &ctx
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+
+      node-driver-registrar:
+        image:
+          repository: registry.k8s.io/sig-storage/csi-node-driver-registrar
+          tag: v2.16.0
+        args:
+          - --v=5
+          - --csi-address=/csi/csi.sock
+          - --kubelet-registration-path=/var/lib/kubelet/plugins/$(NODE_DRIVER)/csi.sock
+        probes:
+          liveness:
+            custom: true
+            enabled: true
+            spec:
+              exec:
+                command:
+                  - /csi-node-driver-registrar
+                  - --kubelet-registration-path=/var/lib/kubelet/plugins/$(NODE_DRIVER)/csi.sock
+                  - --mode=kubelet-registration-probe
+              initialDelaySeconds: 30
+              timeoutSeconds: 15
+        env:
+          NODE_DRIVER: zfs.csi.kuberaid.eu
+        securityContext: *ctx
+
   manager:
     type: daemonset
 
     containers:
       main:
-        image:
-          repository: ghcr.io/kuberaid/kuberaid-manager
-          tag: dev
+        image: *image
         args: ["manager"]
         env:
           CHROOT: /host
@@ -20,31 +75,57 @@ controllers:
               fieldRef:
                 fieldPath: spec.nodeName
         securityContext:
-          # allowPrivilegeEscalation: false
+          <<: *ctx
+          allowPrivilegeEscalation: true
           privileged: true
-          # capabilities:
-            # drop: ["ALL"]
-            # add: ["SYS_ADMIN", "SYS_CHROOT", "DAC_OVERRIDE", "MKNOD"]
+          runAsNonRoot: false
+          runAsUser: 0
+          runAsGroup: 0
 
 persistence:
-  tmp:
-    type: emptyDir
-    globalMounts:
-      - path: /csi
-
   host:
     type: hostPath
     hostPath: /
     hostPathType: Directory
-    globalMounts:
-      - path: /host
-        mountPropagation: HostToContainer
-        readOnly: true
+    advancedMounts:
+      manager:
+        main:
+          - path: /host
+            mountPropagation: HostToContainer
+            readOnly: true
 
   dev:
     type: hostPath
     hostPath: /dev
     hostPathType: Directory
+    advancedMounts:
+      manager:
+        main:
+          - path: /dev
+
+  kubelet-registry:
+    type: hostPath
+    hostPath: /var/lib/kubelet/plugins_registry/
+    hostPathType: Directory
+    advancedMounts:
+      csi-driver:
+        chown:
+          - path: /registration
+        node-driver-registrar:
+          - path: /registration
+
+  kubelet-plugin:
+    type: hostPath
+    hostPath: /var/lib/kubelet/plugins/zfs.csi.kuberaid.eu/
+    hostPathType: DirectoryOrCreate
+    advancedMounts:
+      csi-driver:
+        main:
+          - path: /csi
+        node-driver-registrar:
+          - path: /csi
+        chown:
+          - path: /csi
 
 rbac:
   roles:

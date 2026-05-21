@@ -293,7 +293,10 @@ deploy:
         -n kube-system \
         --set-literal=controllers.manager.containers.main.image.repository="{{REGISTRY_ADDR}}/kuberaid-manager" \
         --set-literal=controllers.manager.containers.main.image.tag="dev" \
-        --set-literal=controllers.manager.containers.main.image.pullPolicy="Always"
+        --set-literal=controllers.manager.containers.main.image.pullPolicy="Always" \
+        --set-literal=controllers.csi-driver.containers.main.image.repository="{{REGISTRY_ADDR}}/kuberaid-manager" \
+        --set-literal=controllers.csi-driver.containers.main.image.tag="dev" \
+        --set-literal=controllers.csi-driver.containers.main.image.pullPolicy="Always"
 
 watch:
     cargo watch -s "just lab deploy" -i "**/crd.yaml" -d 5

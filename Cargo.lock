@@ -1173,6 +1173,7 @@ dependencies = [
 name = "kuberaid-manager"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "futures",
  "k8s-openapi",
@@ -1184,7 +1185,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "thiserror",
  "tokio",
  "tokio-stream",
  "tonic",

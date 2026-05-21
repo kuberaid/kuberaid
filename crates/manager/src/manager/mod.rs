@@ -1,11 +1,6 @@
-use std::{
-    net::SocketAddr,
-    ops::Deref,
-    pin::Pin,
-    sync::{Arc, RwLock},
-    time::Duration,
-};
+use std::{net::SocketAddr, ops::Deref, pin::Pin, sync::Arc};
 
+use anyhow::Result;
 use kube::Client;
 use kuberaid_api::v1::{
     GetPoolRequest, GetPoolResponse, ListPoolsRequest, ListPoolsResponse, Pool, State,
@@ -16,11 +11,7 @@ use tokio::sync::mpsc;
 use tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream};
 use tonic::{Request, Response, Status, transport::Server};
 use tracing::info;
-use zfs::{
-    ZfsBackend,
-    cli::{ZfsCli, ZfsEvent},
-    new::Zfs,
-};
+use zfs::{ZfsBackend, cli::ZfsCli, new::Zfs};
 
 use crate::manager::controller::{pool, storagenode};
 
@@ -45,7 +36,7 @@ impl Deref for KuberaidManager {
 }
 
 impl KuberaidManager {
-    pub async fn new(node_name: String) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(node_name: String) -> Result<Self> {
         assert!(!node_name.is_empty());
         let client = Client::try_default().await?;
 
@@ -64,7 +55,7 @@ impl KuberaidManager {
         );
     }
 
-    async fn serve(self, addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
+    async fn serve(self, addr: SocketAddr) -> Result<()> {
         Server::builder()
             .add_service(ManagerServer::new(self))
             .serve(addr)
