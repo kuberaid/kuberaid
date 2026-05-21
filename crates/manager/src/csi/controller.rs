@@ -3,13 +3,14 @@ use k8s_csi::v1::{
     ControllerGetCapabilitiesRequest, ControllerGetCapabilitiesResponse,
     ControllerGetVolumeRequest, ControllerGetVolumeResponse, ControllerModifyVolumeRequest,
     ControllerModifyVolumeResponse, ControllerPublishVolumeRequest,
-    ControllerPublishVolumeResponse, ControllerUnpublishVolumeRequest,
+    ControllerPublishVolumeResponse, ControllerServiceCapability, ControllerUnpublishVolumeRequest,
     ControllerUnpublishVolumeResponse, CreateSnapshotRequest, CreateSnapshotResponse,
     CreateVolumeRequest, CreateVolumeResponse, DeleteSnapshotRequest, DeleteSnapshotResponse,
     DeleteVolumeRequest, DeleteVolumeResponse, GetCapacityRequest, GetCapacityResponse,
     GetSnapshotRequest, GetSnapshotResponse, ListSnapshotsRequest, ListSnapshotsResponse,
     ListVolumesRequest, ListVolumesResponse, ValidateVolumeCapabilitiesRequest,
     ValidateVolumeCapabilitiesResponse, controller_server::Controller,
+    controller_service_capability,
 };
 
 use crate::csi::CSIPlugin;
@@ -72,7 +73,7 @@ impl Controller for CSIPlugin {
         req: Request<ControllerGetCapabilitiesRequest>,
     ) -> Result<Response<ControllerGetCapabilitiesResponse>, Status> {
         Ok(Response::new(ControllerGetCapabilitiesResponse {
-            capabilities: vec![],
+            capabilities: vec![controller_service_capability::rpc::Type::ExpandVolume.into()],
         }))
     }
 

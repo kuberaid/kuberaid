@@ -61,6 +61,91 @@ controllers:
           NODE_DRIVER: zfs.csi.kuberaid.eu
         securityContext: *ctx
 
+  csi-controller:
+    replicas: 3
+
+    pod:
+      securityContext:
+        runAsNonRoot: false
+        runAsUser: 0
+        runAsGroup: 0
+        fsGroup: 0
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/controller
+                    operator: In
+                    values:
+                      - csi-controller
+                  - key: app.kubernetes.io/instance
+                    operator: In
+                    values:
+                      - "{{ .Release.Name }}"
+              topologyKey: kubernetes.io/hostname
+
+    containers:
+      provisioner:
+        image:
+          repository: registry.k8s.io/sig-storage/csi-provisioner
+          tag: v6.2.0
+        args:
+          - --csi-address=/csi/csi.sock
+          - --leader-election
+          - --leader-election-namespace=$(NAMESPACE)
+          - --feature-gates=Topology=true
+          - --enable-capacity
+          - --extra-create-metadata
+          - --default-fstype=xfs
+          # - --http-endpoint="8080"
+        # probes:
+        #   liveness:
+        #     custom: true
+        #     enabled: true
+        #     spec:
+        #       exec:
+        #         command:
+        #           - /csi-node-driver-registrar
+        #           - --kubelet-registration-path=/var/lib/kubelet/plugins/$(NODE_DRIVER)/csi.sock
+        #           - --mode=kubelet-registration-probe
+        #       initialDelaySeconds: 30
+        #       timeoutSeconds: 15
+        env: &csiEnv
+          NAMESPACE:
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          POD_NAME:
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        securityContext: *ctx
+
+      resizer:
+        image:
+          repository: registry.k8s.io/sig-storage/csi-resizer
+          tag: v2.1.0
+        args:
+          - --csi-address=/csi/csi.sock
+          - --leader-election
+          - --leader-election-namespace=$(NAMESPACE)
+          # - --http-endpoint="8080"
+        # probes:
+        #   liveness:
+        #     custom: true
+        #     enabled: true
+        #     spec:
+        #       exec:
+        #         command:
+        #           - /csi-node-driver-registrar
+        #           - --kubelet-registration-path=/var/lib/kubelet/plugins/$(NODE_DRIVER)/csi.sock
+        #           - --mode=kubelet-registration-probe
+        #       initialDelaySeconds: 30
+        #       timeoutSeconds: 15
+        env: *csiEnv
+        securityContext: *ctx
+
   manager:
     type: daemonset
 
@@ -109,8 +194,6 @@ persistence:
     hostPathType: Directory
     advancedMounts:
       csi-driver:
-        chown:
-          - path: /registration
         node-driver-registrar:
           - path: /registration
 
@@ -120,12 +203,12 @@ persistence:
     hostPathType: DirectoryOrCreate
     advancedMounts:
       csi-driver:
-        main:
+        main: &csi
           - path: /csi
-        node-driver-registrar:
-          - path: /csi
-        chown:
-          - path: /csi
+        node-driver-registrar: *csi
+      csi-controller:
+        provisioner: *csi
+        resizer: *csi
 
 rbac:
   roles:
@@ -135,6 +218,105 @@ rbac:
         - apiGroups: ["kuberaid.eu", "zfs.kuberaid.eu"]
           resources: ["*"]
           verbs: ["*"]
+
+    csi-provisioner-cfg:
+      type: Role
+      rules:
+        # Only one of the following rules for endpoints or leases is required based on
+        # what is set for `--leader-election-type`. Endpoints are deprecated in favor of Leases.
+        - apiGroups: ["coordination.k8s.io"]
+          resources: ["leases"]
+          verbs: ["get", "watch", "list", "delete", "update", "create"]
+        # Permissions for CSIStorageCapacity are only needed enabling the publishing
+        # of storage capacity information.
+        - apiGroups: ["storage.k8s.io"]
+          resources: ["csistoragecapacities"]
+          verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+        # The GET permissions below are needed for walking up the ownership chain
+        # for CSIStorageCapacity. They are sufficient for deployment via
+        # StatefulSet (only needs to get Pod) and Deployment (needs to get
+        # Pod and then ReplicaSet to find the Deployment).
+        - apiGroups: [""]
+          resources: ["pods"]
+          verbs: ["get"]
+        - apiGroups: ["apps"]
+          resources: ["replicasets"]
+          verbs: ["get"]
+
+    csi-provisioner:
+      type: ClusterRole
+      rules:
+        # The following rule should be uncommented for plugins that require secrets
+        # for provisioning.
+        # - apiGroups: [""]
+        #   resources: ["secrets"]
+        #   verbs: ["get", "list"]
+        - apiGroups: [""]
+          resources: ["persistentvolumes"]
+          verbs: ["get", "list", "watch", "create", "patch", "delete"]
+        - apiGroups: [""]
+          resources: ["persistentvolumeclaims"]
+          verbs: ["get", "list", "watch", "update"]
+        - apiGroups: ["storage.k8s.io"]
+          resources: ["storageclasses"]
+          verbs: ["get", "list", "watch"]
+        - apiGroups: [""]
+          resources: ["events"]
+          verbs: ["list", "watch", "create", "update", "patch"]
+        # The "watch" and "update" verbs for volumesnapshots are optional but recommended.
+        # They enable finalizer-based protection to prevent snapshots from being deleted
+        # during provisioning. Without these permissions, the provisioner will still function
+        # but snapshot protection will be unavailable. This makes the provisioner backwards
+        # compatible with older RBAC configurations.
+        - apiGroups: ["snapshot.storage.k8s.io"]
+          resources: ["volumesnapshots"]
+          verbs: ["get", "list", "watch", "update"]
+        - apiGroups: ["snapshot.storage.k8s.io"]
+          resources: ["volumesnapshotcontents"]
+          verbs: ["get", "list"]
+        - apiGroups: ["storage.k8s.io"]
+          resources: ["csinodes"]
+          verbs: ["get", "list", "watch"]
+        - apiGroups: [""]
+          resources: ["nodes"]
+          verbs: ["get", "list", "watch"]
+        # Access to volumeattachments is only needed when the CSI driver
+        # has the PUBLISH_UNPUBLISH_VOLUME controller capability.
+        # In that case, external-provisioner will watch volumeattachments
+        # to determine when it is safe to delete a volume.
+        - apiGroups: ["storage.k8s.io"]
+          resources: ["volumeattachments"]
+          verbs: ["get", "list", "watch"]
+        # (Alpha) Access to referencegrants is only needed when the CSI driver
+        # has the CrossNamespaceVolumeDataSource controller capability.
+        # In that case, external-provisioner requires "get", "list", "watch"
+        # permissions  for "referencegrants" on "gateway.networking.k8s.io".
+        #- apiGroups: ["gateway.networking.k8s.io"]
+        #  resources: ["referencegrants"]
+        #  verbs: ["get", "list", "watch"]
+
+    csi-resizer:
+      type: ClusterRole
+      rules:
+        - apiGroups: [""]
+          resources: ["persistentvolumes"]
+          verbs: ["get", "list", "watch", "patch"]
+        - apiGroups: [""]
+          resources: ["persistentvolumeclaims"]
+          verbs: ["get", "list", "watch"]
+        - apiGroups: [""]
+          resources: ["pods"]
+          verbs: ["get", "list", "watch"]
+        - apiGroups: [""]
+          resources: ["persistentvolumeclaims/status"]
+          verbs: ["patch"]
+        - apiGroups: [""]
+          resources: ["events"]
+          verbs: ["list", "watch", "create", "update", "patch"]
+        - apiGroups: ["storage.k8s.io"]
+          resources: ["volumeattributesclasses"]
+          verbs: ["get", "list", "watch"]
+
   bindings:
     manager:
       type: ClusterRoleBinding
@@ -143,3 +325,26 @@ rbac:
           serviceAccount: kuberaid
       roleRef:
         identifier: manager
+
+    csi-provisioner-cfg:
+      type: RoleBinding
+      subjects:
+        - identifier: kuberaid
+          serviceAccount: kuberaid
+      roleRef:
+        identifier: csi-provisioner-cfg
+    csi-provisioner:
+      type: ClusterRoleBinding
+      subjects:
+        - identifier: kuberaid
+          serviceAccount: kuberaid
+      roleRef:
+        identifier: csi-provisioner
+
+    csi-resizer:
+      type: ClusterRoleBinding
+      subjects:
+        - identifier: kuberaid
+          serviceAccount: kuberaid
+      roleRef:
+        identifier: csi-resizer

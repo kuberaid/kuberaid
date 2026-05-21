@@ -32,6 +32,7 @@ impl Identity for CSIPlugin {
             capabilities: vec![
                 pc::service::Type::ControllerService.into(),
                 pc::service::Type::VolumeAccessibilityConstraints.into(),
+                pc::volume_expansion::Type::Online.into(),
             ],
         }))
     }

@@ -59,7 +59,10 @@ impl Node for CSIPlugin {
         req: Request<NodeGetCapabilitiesRequest>,
     ) -> Result<Response<NodeGetCapabilitiesResponse>, Status> {
         Ok(Response::new(NodeGetCapabilitiesResponse {
-            capabilities: vec![node_service_capability::rpc::Type::StageUnstageVolume.into()],
+            capabilities: vec![
+                node_service_capability::rpc::Type::StageUnstageVolume.into(),
+                node_service_capability::rpc::Type::ExpandVolume.into(),
+            ],
         }))
     }
     async fn node_get_info(
