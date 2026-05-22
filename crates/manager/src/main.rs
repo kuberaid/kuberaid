@@ -4,8 +4,9 @@ use std::{net::SocketAddr, path::PathBuf};
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use kuberaid_manager::{csi::CSIPlugin, manager::KuberaidManager};
 use nix::unistd::gethostname;
+
+use kuberaid_manager::{csi::CSIPlugin, manager::KuberaidManager};
 
 #[derive(Subcommand)]
 pub enum Commands {

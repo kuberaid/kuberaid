@@ -1,20 +1,16 @@
 use std::{sync::Arc, time::Duration};
 
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
-// use futures::StreamExt;
 use kube::{
-    Api, Client, Error, Resource, ResourceExt,
+    Api, Error, Resource, ResourceExt,
     api::{ObjectMeta, Patch, PatchParams, PostParams},
     runtime::{
         Controller, WatchStreamExt, controller::Action, reflector::ObjectRef, watcher::Config,
     },
 };
-use serde_json::json;
 use tokio_stream::{StreamExt as TokioStreamExt, wrappers::BroadcastStream};
-use zfs::{cli::ZfsScalar, new::Zfs};
 
 use crate::{
-    crds::{Pool, PoolSpec, PoolStatus, StorageNode},
+    crds::{Pool, StorageNode},
     manager::KuberaidManager,
 };
 use tracing::{error, info};

@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use kube::CustomResource;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use zfs::cli::ZfsScalar;
 
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema, Default)]
 #[kube(kind = "Pool", group = "zfs.kuberaid.eu", version = "v1")]

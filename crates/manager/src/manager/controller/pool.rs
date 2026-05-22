@@ -1,17 +1,12 @@
 use std::{sync::Arc, time::Duration};
 
-// use futures::StreamExt;
 use kube::{
-    Api, Client, Error, Resource, ResourceExt,
-    api::{DeleteParams, ObjectMeta, Patch, PatchParams, PostParams},
+    Api, Error, Resource, ResourceExt,
+    api::{DeleteParams, Patch, PatchParams},
     runtime::{
-        Controller, WatchStreamExt,
-        controller::Action,
-        reflector::{Lookup, ObjectRef},
-        watcher::{self, Config},
+        Controller, WatchStreamExt, controller::Action, reflector::ObjectRef, watcher::Config,
     },
 };
-use kuberaid_api::v1::manager_server::Manager;
 use serde_json::json;
 use tokio_stream::{StreamExt as TokioStreamExt, wrappers::BroadcastStream};
 use zfs::cli::ZfsScalar;
@@ -20,7 +15,7 @@ use crate::{
     crds::{Pool, PoolStatus, StorageNode},
     manager::KuberaidManager,
 };
-use tracing::{error, info};
+use tracing::error;
 
 async fn reconcile(obj: Arc<Pool>, manager: Arc<KuberaidManager>) -> Result<Action, Error> {
     // let _ = manager.zfs.refresh().await;

@@ -1,15 +1,14 @@
 use std::ops::Deref;
 use std::sync::Arc;
-use std::time::Instant;
 use std::{collections::HashMap, path::PathBuf};
 
-use chrono::{DateTime, TimeDelta, Utc};
+use chrono::Utc;
 use futures::StreamExt;
-use tokio::sync::{Mutex, RwLock, broadcast};
+use tokio::sync::{RwLock, broadcast};
 use tokio::task::JoinHandle;
 use tracing::info;
 
-use crate::cli::{EventStream, HistoryEventKind, ZfsCli, ZfsEvent, ZfsEventKind, ZfsScalar};
+use crate::cli::{HistoryEventKind, ZfsCli, ZfsEvent, ZfsEventKind, ZfsScalar};
 use crate::{Property, Result, ZDataset, ZPool, ZfsBackend};
 
 #[derive(Debug, Default, PartialEq, Eq, Hash, Clone)]

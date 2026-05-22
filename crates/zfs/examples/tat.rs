@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use futures::StreamExt;
 use zfs::ZfsBackend;
 use zfs::cli::ZfsCli;
 use zfs::new::Zfs;
